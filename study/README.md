@@ -50,7 +50,7 @@ are injected automatically into every function's environment by Supabase.
 ### 3. Create your admin login
 
 Dashboard → Authentication → Users → Add user — use andrew.ibrahim@tum.de
-and a password of your choice (this is what you'll use to sign into
+and a password of your choice (this is what you'll use to sign in to
 `admin.html`). Then in the SQL Editor:
 ```sql
 insert into admin_users (user_id)
