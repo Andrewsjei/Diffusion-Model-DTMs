@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Study admin</title>
+<style>
+:root{color-scheme:light;
+ --surface-1:#fcfcfb;--surface-2:#fff;--line:#e4e4e0;
+ --text-primary:#0b0b0b;--text-secondary:#52514e;--text-muted:#86857f;
+ --accent:#2a78d6;--bad:#d03b3b;}
+@media (prefers-color-scheme:dark){:root:where(:not([data-theme="light"])){
+ color-scheme:dark;
+ --surface-1:#1a1a19;--surface-2:#232322;--line:#33332f;
+ --text-primary:#fff;--text-secondary:#c3c2b7;--text-muted:#8f8e86;
+ --accent:#3987e5;--bad:#e05252;}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--surface-1);color:var(--text-primary);
+ font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+ padding:32px 20px 80px}
+.wrap{max-width:860px;margin:0 auto}
+h1{font-size:1.5rem;margin:0 0 .3em}
+h2{font-size:1rem;margin:2em 0 .8em}
+.gate{max-width:380px;margin:14vh auto;background:var(--surface-2);
+ border:1px solid var(--line);border-radius:14px;padding:26px}
+input{width:100%;padding:.7em .9em;font:inherit;border:1px solid var(--line);
+ border-radius:9px;background:var(--surface-1);color:var(--text-primary);margin:.5em 0}
+button{font:inherit;font-weight:600;background:var(--accent);color:#fff;border:0;
+ border-radius:9px;padding:.7em 1.4em;cursor:pointer}
+button.secondary{background:transparent;color:var(--accent);border:1px solid var(--line)}
+button:disabled{opacity:.5;cursor:not-allowed}
+.err{color:var(--bad);font-size:.88rem;min-height:1.3em}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.tile{background:var(--surface-2);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.tile b{display:block;font-size:1.6rem}
+.tile span{font-size:.78rem;color:var(--text-secondary)}
+table{width:100%;border-collapse:collapse;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+th,td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--line)}
+th{font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted)}
+.actions{display:flex;gap:10px;margin-top:.6em}
+</style></head><body>
+
+<div id="gate" class="gate">
+  <h1>Study admin</h1>
+  <p style="color:var(--text-secondary);font-size:.9rem">Sign in with the Supabase account added to <code>admin_users</code> (see study/README.md).</p>
+  <input id="email" type="email" placeholder="Email" autocomplete="username">
+  <input id="password" type="password" placeholder="Password" autocomplete="current-password">
+  <button id="loginBtn">Sign in</button>
+  <p class="err" id="loginErr"></p>
+</div>
+
+<div class="wrap" id="app" hidden>
+  <h1>Study admin</h1>
+
+  <h2>Participants</h2>
+  <div class="tiles" id="participantTiles"></div>
+
+  <h2>Responses</h2>
+  <div class="tiles" id="responseTiles"></div>
+
+  <h2>By image source</h2>
+  <div style="overflow-x:auto">
+    <table id="sourceTable">
+      <thead><tr><th>Source</th><th>Total</th><th>Said AI</th><th>Said Real</th><th>Not sure</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <h2>Export</h2>
+  <div class="actions">
+    <button class="secondary" id="exportRaw">Download raw responses (CSV)</button>
+    <button class="secondary" id="exportSummary">Download participant summary (CSV)</button>
+  </div>
+</div>
+
+<script src="content.js"></script>
+<script>
+const CFG = window.STUDY_CONFIG;
+const FN_URL = (name) => `${CFG.SUPABASE_URL}/functions/v1/${name}`;
+let accessToken = null; // kept in memory only — a reload requires signing in again
+
+async function login() {
+  const email = document.getElementById("email").value.trim();
+  const password = document.getElementById("password").value;
+  const errEl = document.getElementById("loginErr");
+  errEl.textContent = "";
+  try {
+    const res = await fetch(`${CFG.SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", apikey: CFG.SUPABASE_ANON_KEY },
+      body: JSON.stringify({ email, password }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error_description || data.msg || "Sign-in failed");
+    accessToken = data.access_token;
+    document.getElementById("gate").hidden = true;
+    document.getElementById("app").hidden = false;
+    await loadStats();
+  } catch (e) {
+    errEl.textContent = e.message;
+  }
+}
+document.getElementById("loginBtn").addEventListener("click", login);
+document.getElementById("password").addEventListener("keydown", (e) => { if (e.key === "Enter") login(); });
+
+async function callFunction(name, body) {
+  const res = await fetch(FN_URL(name), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: CFG.SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify(body || {}),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || `HTTP ${res.status}`);
+  }
+  return res;
+}
+
+function tile(container, value, label) {
+  const el = document.createElement("div");
+  el.className = "tile";
+  el.innerHTML = `<b>${value}</b><span>${label}</span>`;
+  container.appendChild(el);
+}
+
+async function loadStats() {
+  const data = await (await callFunction("admin-data")).json();
+
+  const pTiles = document.getElementById("participantTiles");
+  pTiles.innerHTML = "";
+  tile(pTiles, data.participants.total, "Total");
+  tile(pTiles, data.participants.completed, "Completed");
+  tile(pTiles, data.participants.incomplete, "Incomplete");
+
+  const rTiles = document.getElementById("responseTiles");
+  rTiles.innerHTML = "";
+  tile(rTiles, data.responses.total, "Total responses");
+  tile(rTiles, data.responses.by_answer.ai, "Said AI-generated");
+  tile(rTiles, data.responses.by_answer.real, "Said Real");
+  tile(rTiles, data.responses.by_answer.not_sure, "Not sure");
+
+  const tbody = document.querySelector("#sourceTable tbody");
+  tbody.innerHTML = "";
+  const order = ["real", "checkpoint1", "checkpoint2", "checkpoint3", "checkpoint4"];
+  for (const src of order) {
+    const s = data.responses.by_source[src] || { total: 0, ai: 0, real: 0, not_sure: 0 };
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${src}</td><td>${s.total}</td><td>${s.ai}</td><td>${s.real}</td><td>${s.not_sure}</td>`;
+    tbody.appendChild(tr);
+  }
+}
+
+async function downloadCsv(type, filename) {
+  const res = await callFunction("admin-export", { type });
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+document.getElementById("exportRaw").addEventListener("click", () => downloadCsv("raw", "raw_responses.csv"));
+document.getElementById("exportSummary").addEventListener("click", () => downloadCsv("summary", "participant_summary.csv"));
+</script>
+</body></html>

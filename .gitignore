@@ -1,0 +1,11 @@
+# Never commit real Supabase secrets.
+scripts/.env
+
+# OS / editor noise
+.DS_Store
+*.swp
+__pycache__/
+
+# Supabase CLI local state.
+.supabase/
+supabase/.temp/

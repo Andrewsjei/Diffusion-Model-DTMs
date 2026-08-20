@@ -1,0 +1,38 @@
+name: Deploy study to GitHub Pages
+
+# Publishes the study/ folder only — the diffusion-model source elsewhere
+# in this repo is untouched. Requires a one-time setting change: repo
+# Settings -> Pages -> Build and deployment -> Source: "GitHub Actions".
+# See study/README.md, "Enabling GitHub Pages."
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "study/**"
+      - ".github/workflows/deploy-study-pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: study
+      - id: deployment
+        uses: actions/deploy-pages@v4

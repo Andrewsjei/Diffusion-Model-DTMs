@@ -1,0 +1,419 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Image evaluation study</title>
+<style>
+:root{color-scheme:light;
+ --surface-1:#fcfcfb;--surface-2:#fff;--line:#e4e4e0;
+ --text-primary:#0b0b0b;--text-secondary:#52514e;--text-muted:#86857f;
+ --accent:#2a78d6;--good:#1baf7a;--bad:#d03b3b;--warn:#eda100;}
+@media (prefers-color-scheme:dark){:root:where(:not([data-theme="light"])){
+ color-scheme:dark;
+ --surface-1:#1a1a19;--surface-2:#232322;--line:#33332f;
+ --text-primary:#fff;--text-secondary:#c3c2b7;--text-muted:#8f8e86;
+ --accent:#3987e5;--good:#199e70;--bad:#e05252;--warn:#c98500;}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--surface-1);color:var(--text-primary);
+ font:16px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+ padding:32px 20px 100px}
+.wrap{max-width:900px;margin:0 auto}
+.card{background:var(--surface-2);border:1px solid var(--line);border-radius:14px;padding:28px}
+h1{font-size:1.6rem;margin:0 0 .6em;letter-spacing:-.02em}
+p{color:var(--text-secondary)}
+.muted{color:var(--text-muted)}
+button{font:inherit;font-weight:600;background:var(--accent);color:#fff;border:0;
+ border-radius:9px;padding:.8em 1.6em;cursor:pointer}
+button:disabled{opacity:.45;cursor:not-allowed}
+button.secondary{background:transparent;color:var(--accent);border:1px solid var(--line)}
+a.link{color:var(--accent);cursor:pointer;text-decoration:underline;font-size:.92rem}
+input[type=text]{width:100%;padding:.7em .9em;font:inherit;border:1px solid var(--line);
+ border-radius:9px;background:var(--surface-1);color:var(--text-primary)}
+.examples{display:flex;gap:20px;flex-wrap:wrap;margin:1.6em 0}
+.example{flex:1 1 220px}
+.example img{width:100%;height:180px;object-fit:cover;border-radius:10px;border:1px solid var(--line)}
+.example .cap{font-size:.85rem;color:var(--text-muted);margin-top:.4em;text-align:center}
+.resume-box{margin-top:1.6em;padding-top:1.4em;border-top:1px solid var(--line)}
+.resume-form{display:flex;gap:10px;margin-top:.8em;max-width:360px}
+.err{color:var(--bad);font-size:.9rem;min-height:1.3em;margin-top:.6em}
+.progress-row{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:1.2em}
+.progress-row .muted{font-size:.9rem}
+.track{height:8px;background:var(--line);border-radius:4px;overflow:hidden;margin-bottom:1.6em}
+.fill{height:100%;background:var(--accent);transition:width .2s}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:18px;margin-bottom:1.6em}
+.trial{background:var(--surface-1);border:1px solid var(--line);border-radius:12px;padding:12px}
+.trial img{width:100%;aspect-ratio:1/1;object-fit:contain;border-radius:8px;background:var(--surface-2);display:block;margin-bottom:.7em}
+.opts{display:flex;flex-direction:column;gap:.35em}
+.opt{display:flex;align-items:center;gap:.5em;font-size:.92rem;cursor:pointer}
+.saved-tag{font-size:.75rem;color:var(--good);margin-top:.4em;min-height:1.1em}
+.nav-row{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.status-line{font-size:.85rem;color:var(--text-muted);margin-top:1em;text-align:center}
+.status-line.pending{color:var(--warn)}
+.status-line.bad{color:var(--bad)}
+#savecode .code{font:600 1.4rem/1 ui-monospace,monospace;background:var(--surface-1);
+ border:1px solid var(--line);border-radius:9px;padding:.6em .9em;display:inline-block;margin:.6em 0}
+.participant-id{font:600 1.1rem ui-monospace,monospace;color:var(--text-secondary)}
+</style></head><body>
+
+<div class="wrap">
+
+<div id="intro" class="card">
+  <h1 id="introHeading"></h1>
+  <div id="introParas"></div>
+
+  <div class="examples">
+    <div class="example">
+      <img id="exampleReal" alt="Real example">
+      <div class="cap" id="exampleRealCap"></div>
+    </div>
+    <div class="example">
+      <img id="exampleAi" alt="AI-generated example">
+      <div class="cap" id="exampleAiCap"></div>
+    </div>
+  </div>
+
+  <button id="startBtn"></button>
+  <div class="err" id="startErr"></div>
+
+  <div class="resume-box">
+    <a class="link" id="resumeToggle">Already started? Resume with your code</a>
+    <div class="resume-form" id="resumeForm" hidden>
+      <input type="text" id="resumeInput" placeholder="XXXX-XXXX" autocomplete="off">
+      <button id="resumeBtn" class="secondary">Resume</button>
+    </div>
+    <div class="err" id="resumeErr"></div>
+  </div>
+</div>
+
+<div id="savecode" class="card" hidden>
+  <h1>Save your resume code</h1>
+  <p>You can leave this study at any point and come back later. To resume,
+     you'll need this code — write it down or copy it somewhere safe.
+     It will not be shown again.</p>
+  <div class="code" id="resumeCodeDisplay"></div>
+  <p class="muted">Participant ID: <span id="participantIdDisplay" class="participant-id"></span></p>
+  <button id="continueBtn">Continue to the trials</button>
+</div>
+
+<div id="trials" class="card" hidden>
+  <div class="progress-row">
+    <span id="pageLabel"></span>
+    <span class="muted" id="progressLabel"></span>
+  </div>
+  <div class="track"><div class="fill" id="progressFill"></div></div>
+  <div class="grid" id="trialGrid"></div>
+  <div class="nav-row">
+    <button id="backBtn" class="secondary">Back</button>
+    <button id="nextBtn" disabled></button>
+  </div>
+  <div class="status-line" id="statusLine"></div>
+</div>
+
+<div id="done" class="card" hidden>
+  <h1 id="doneHeading"></h1>
+  <p id="doneBody"></p>
+  <p class="muted">Your anonymous participant ID: <span id="doneParticipantId" class="participant-id"></span></p>
+</div>
+
+</div>
+
+<script src="content.js"></script>
+<script>
+const CFG = window.STUDY_CONFIG, TXT = window.STUDY_CONTENT;
+const FN_URL = (name) => `${CFG.SUPABASE_URL}/functions/v1/${name}`;
+const IMAGES_PER_PAGE = 8, PAGES = 6, TOTAL_TRIALS = 48;
+
+async function callFunction(name, body) {
+  const res = await fetch(FN_URL(name), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "apikey": CFG.SUPABASE_ANON_KEY,
+      "Authorization": `Bearer ${CFG.SUPABASE_ANON_KEY}`,
+    },
+    body: JSON.stringify(body || {}),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  return data;
+}
+
+/* ---------- state ---------- */
+const CREDS_KEY = "dtm-study-creds";
+const QUEUE_KEY = "dtm-study-queue";
+let SESSION = null;          // {participant_id, resume_code, trials, experiment_version}
+let answered = {};            // trial_number -> response (local view, includes unflushed)
+let saved = {};                // trial_number -> true once server-confirmed
+let currentPage = 1;
+let pageShownAt = Date.now();
+
+function loadCreds() {
+  try { return JSON.parse(localStorage.getItem(CREDS_KEY) || "null"); } catch { return null; }
+}
+function saveCreds(participant_id, resume_code) {
+  try { localStorage.setItem(CREDS_KEY, JSON.stringify({ participant_id, resume_code })); } catch {}
+}
+function clearCreds() {
+  try { localStorage.removeItem(CREDS_KEY); localStorage.removeItem(QUEUE_KEY); } catch {}
+}
+function loadQueue() {
+  try { return JSON.parse(localStorage.getItem(QUEUE_KEY) || "[]"); } catch { return []; }
+}
+function saveQueue(q) {
+  try { localStorage.setItem(QUEUE_KEY, JSON.stringify(q)); } catch {}
+}
+
+/* ---------- autosave queue: mirrors the pattern used in the roof-type
+   study (voxel-roof-study/index.html) — every answer is queued to
+   localStorage immediately, then flushed to the server, with retry and
+   a best-effort sendBeacon on page close. The difference here is the
+   destination is submit-response (an Edge Function), not a raw table
+   insert, because it has to resolve and stamp the ground-truth source
+   type server-side. ---------- */
+let flushing = false;
+async function flush() {
+  if (flushing) return;
+  const q = loadQueue();
+  if (!q.length) { setStatus("saved"); return; }
+  flushing = true;
+  setStatus("sending");
+  const remaining = [];
+  for (const item of q) {
+    try {
+      const res = await callFunction("submit-response", item);
+      saved[item.trial_number] = true;
+      updateSavedTag(item.trial_number);
+      if (res.completed) await onCompleted();
+    } catch (e) {
+      console.error("submit failed", e);
+      remaining.push(item);
+    }
+  }
+  saveQueue(remaining);
+  flushing = false;
+  if (remaining.length) {
+    setStatus("pending", remaining.length);
+    setTimeout(flush, 4000);
+  } else {
+    setStatus("saved");
+  }
+}
+function setStatus(state, n) {
+  const el = document.getElementById("statusLine");
+  if (!el) return;
+  el.className = "status-line" + (state === "pending" ? " pending" : "");
+  el.textContent = state === "saved" ? "All answers saved."
+    : state === "sending" ? "Saving…"
+    : `${n} answer${n === 1 ? "" : "s"} saved on this device, retrying…`;
+}
+function updateSavedTag(trialNumber) {
+  const tag = document.getElementById("saved-" + trialNumber);
+  if (tag) tag.textContent = saved[trialNumber] ? "✓ saved" : "";
+}
+window.addEventListener("pagehide", () => {
+  const q = loadQueue();
+  if (!q.length || !navigator.sendBeacon || !SESSION) return;
+  for (const item of q) {
+    navigator.sendBeacon(FN_URL("submit-response") + "?apikey=" + encodeURIComponent(CFG.SUPABASE_ANON_KEY),
+      new Blob([JSON.stringify(item)], { type: "application/json" }));
+  }
+});
+
+function recordAnswer(trial_number, response) {
+  const response_time_ms = Date.now() - pageShownAt;
+  answered[trial_number] = response;
+  saved[trial_number] = false;
+  updateSavedTag(trial_number);
+  const q = loadQueue();
+  const item = {
+    participant_id: SESSION.participant_id,
+    resume_code: SESSION.resume_code,
+    trial_number, response, response_time_ms,
+  };
+  // Replace any not-yet-sent queue entry for the same trial rather than stacking dupes.
+  const filtered = q.filter((x) => x.trial_number !== trial_number);
+  filtered.push(item);
+  saveQueue(filtered);
+  flush();
+  refreshNextButton();
+  refreshProgress();
+}
+
+/* ---------- flow ---------- */
+function trialsForPage(page) {
+  return SESSION.trials.filter((t) => t.page === page);
+}
+function renderIntro() {
+  document.getElementById("introHeading").textContent = TXT.heading;
+  const paras = document.getElementById("introParas");
+  paras.innerHTML = "";
+  for (const p of TXT.intro_paragraphs) {
+    const el = document.createElement("p");
+    el.textContent = p;
+    paras.appendChild(el);
+  }
+  document.getElementById("exampleReal").src = TXT.example_real.src;
+  document.getElementById("exampleRealCap").textContent = TXT.example_real.caption;
+  document.getElementById("exampleAi").src = TXT.example_ai.src;
+  document.getElementById("exampleAiCap").textContent = TXT.example_ai.caption;
+  document.getElementById("startBtn").textContent = TXT.start_button;
+}
+function showOnly(id) {
+  for (const s of ["intro", "savecode", "trials", "done"]) {
+    document.getElementById(s).hidden = s !== id;
+  }
+  window.scrollTo(0, 0);
+}
+function renderPage() {
+  pageShownAt = Date.now();
+  document.getElementById("pageLabel").textContent = `Page ${currentPage} of ${PAGES}`;
+  const n = Object.keys(answered).length;
+  document.getElementById("progressLabel").textContent = `Trials completed: ${n} / ${TOTAL_TRIALS}`;
+  document.getElementById("progressFill").style.width = (100 * n / TOTAL_TRIALS) + "%";
+
+  const grid = document.getElementById("trialGrid");
+  grid.innerHTML = "";
+  for (const t of trialsForPage(currentPage)) {
+    const card = document.createElement("div");
+    card.className = "trial";
+    const current = answered[t.trial_number];
+    card.innerHTML = `
+      <img src="${t.image_url}" alt="">
+      <div class="opts">
+        ${["real", "ai", "not_sure"].map((v) => `
+          <label class="opt">
+            <input type="radio" name="t${t.trial_number}" value="${v}" ${current === v ? "checked" : ""}>
+            ${v === "real" ? "Real" : v === "ai" ? "AI-generated" : "Not sure"}
+          </label>`).join("")}
+      </div>
+      <div class="saved-tag" id="saved-${t.trial_number}">${saved[t.trial_number] ? "✓ saved" : ""}</div>
+    `;
+    card.querySelectorAll("input[type=radio]").forEach((inp) => {
+      inp.addEventListener("change", () => recordAnswer(t.trial_number, inp.value));
+    });
+    grid.appendChild(card);
+  }
+  document.getElementById("backBtn").disabled = currentPage <= 1;
+  document.getElementById("nextBtn").textContent = currentPage < PAGES ? "Next" : "Finish";
+  refreshNextButton();
+  refreshProgress();
+}
+function refreshProgress() {
+  const n = Object.keys(answered).length;
+  document.getElementById("progressLabel").textContent = `Trials completed: ${n} / ${TOTAL_TRIALS}`;
+  document.getElementById("progressFill").style.width = (100 * n / TOTAL_TRIALS) + "%";
+}
+function refreshNextButton() {
+  const done = trialsForPage(currentPage).every((t) => answered[t.trial_number] !== undefined);
+  document.getElementById("nextBtn").disabled = !done;
+}
+
+let completedShown = false;
+async function onCompleted() {
+  if (completedShown) return;
+  completedShown = true;
+  document.getElementById("doneHeading").textContent = TXT.completion_heading;
+  document.getElementById("doneBody").textContent = TXT.completion_body;
+  document.getElementById("doneParticipantId").textContent = SESSION.participant_id;
+  clearCreds();
+  showOnly("done");
+}
+
+document.getElementById("nextBtn").addEventListener("click", async () => {
+  if (currentPage < PAGES) {
+    currentPage++;
+    renderPage();
+    return;
+  }
+  // Last page: don't declare completion until the queue is actually
+  // drained, so "finished" always means "saved," per the spec.
+  document.getElementById("nextBtn").disabled = true;
+  document.getElementById("nextBtn").textContent = "Saving…";
+  await flush();
+  const allAnswered = Object.keys(answered).length >= TOTAL_TRIALS;
+  if (!completedShown && allAnswered && !loadQueue().length) {
+    // flush() already calls onCompleted() when the server confirms trial
+    // 48; this is the fallback for the case where every item in this
+    // batch was already-saved (so submit-response's completed flag was
+    // never freshly returned) but the sequence is in fact done.
+    await onCompleted();
+  } else if (!completedShown) {
+    document.getElementById("nextBtn").disabled = false;
+    document.getElementById("nextBtn").textContent = "Finish";
+    setStatus("pending", loadQueue().length || 1);
+  }
+});
+document.getElementById("backBtn").addEventListener("click", () => {
+  if (currentPage > 1) { currentPage--; renderPage(); }
+});
+
+document.getElementById("startBtn").addEventListener("click", async () => {
+  const btn = document.getElementById("startBtn");
+  btn.disabled = true;
+  document.getElementById("startErr").textContent = "";
+  try {
+    const data = await callFunction("start-session", {});
+    SESSION = data;
+    answered = {}; saved = {};
+    saveCreds(data.participant_id, data.resume_code);
+    document.getElementById("resumeCodeDisplay").textContent = data.resume_code;
+    document.getElementById("participantIdDisplay").textContent = data.participant_id;
+    showOnly("savecode");
+  } catch (e) {
+    document.getElementById("startErr").textContent =
+      "Could not start the study: " + e.message + ". Please try again in a moment.";
+  } finally {
+    btn.disabled = false;
+  }
+});
+document.getElementById("continueBtn").addEventListener("click", () => {
+  currentPage = 1;
+  showOnly("trials");
+  renderPage();
+});
+
+document.getElementById("resumeToggle").addEventListener("click", () => {
+  document.getElementById("resumeForm").hidden = false;
+});
+document.getElementById("resumeBtn").addEventListener("click", () => doResume());
+document.getElementById("resumeInput").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") doResume();
+});
+async function doResume(codeOverride) {
+  const code = (codeOverride || document.getElementById("resumeInput").value || "").trim();
+  const errEl = document.getElementById("resumeErr");
+  errEl.textContent = "";
+  if (!code) return;
+  try {
+    const data = await callFunction("resume-session", { resume_code: code });
+    SESSION = { participant_id: data.participant_id, resume_code: code.toUpperCase(),
+                trials: data.trials, experiment_version: data.experiment_version };
+    saveCreds(SESSION.participant_id, SESSION.resume_code);
+    answered = { ...data.answered };
+    saved = {};
+    for (const k of Object.keys(answered)) saved[k] = true;
+    if (data.completed) { await onCompleted(); return; }
+    // resume at the first page containing an unanswered trial
+    currentPage = 1;
+    for (const t of SESSION.trials) {
+      if (answered[t.trial_number] === undefined) { currentPage = t.page; break; }
+    }
+    showOnly("trials");
+    renderPage();
+  } catch (e) {
+    errEl.textContent = e.message;
+  }
+}
+
+/* ---------- boot ---------- */
+(function boot() {
+  renderIntro();
+  const creds = loadCreds();
+  if (creds && creds.resume_code) {
+    doResume(creds.resume_code);
+  } else {
+    showOnly("intro");
+  }
+  flush(); // deliver anything stranded from a previous visit
+})();
+</script>
+</body></html>
