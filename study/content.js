@@ -41,7 +41,8 @@ intro_paragraphs: [
   "A slope would look like a gradient, with the picture getting brighter " +
     "the farther up the slope. The images you will be shown have a retention " +
     "basin in the center of the image. So try to look at the center and see " +
-    "if you can see any colour or unnatural shapes.",
+    "if you can see any colour (DTMs are black and white) " + 
+    "or unnatural shapes.",
   "Don't forget to have fun, and send this link to others to challenge them " +
     "and help me with my project! You can leave at any point if you do not " +
     "want to continue, and you can resume later with your code." +
