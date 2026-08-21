@@ -1,5 +1,6 @@
 import { json, preflight } from "../_shared/cors.ts";
 import { serviceClient, requireAdmin } from "../_shared/db.ts";
+import { computeKpis, SourceTally } from "../_shared/stats.ts";
 
 Deno.serve(async (req) => {
   const pf = preflight(req);
@@ -24,7 +25,7 @@ Deno.serve(async (req) => {
   const completed = participants.filter((p) => p.completed_at).length;
 
   const byResponse = { ai: 0, real: 0, not_sure: 0 };
-  const bySource: Record<string, { ai: number; real: number; not_sure: number; total: number }> = {};
+  const bySource: Record<string, SourceTally> = {};
 
   for (const r of responses ?? []) {
     byResponse[r.response as keyof typeof byResponse]++;
@@ -44,5 +45,6 @@ Deno.serve(async (req) => {
       by_answer: byResponse,
       by_source: bySource,
     },
+    kpis: computeKpis(bySource),
   });
 });

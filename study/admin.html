@@ -64,6 +64,24 @@ th{font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;color:var(--te
     </table>
   </div>
 
+  <h2>Accuracy &amp; signal detection</h2>
+  <p style="color:var(--text-secondary);font-size:.85rem;margin-top:-.6em">
+    "Correct" means real images called Real, AI images called AI-generated; "Not sure" counts
+    as incorrect in <b>Accuracy</b> and is excluded from <b>Accuracy (decided only)</b>.
+    Hit rate / false-alarm rate / d&prime; are the standard signal-detection framing:
+    a checkpoint's d&prime; compares its hit rate against the false-alarm rate on real images.
+  </p>
+  <div class="tiles" id="overallKpiTiles"></div>
+  <div style="overflow-x:auto;margin-top:1em">
+    <table id="kpiTable">
+      <thead><tr>
+        <th>Source</th><th>N</th><th>Accuracy</th><th>Accuracy (decided only)</th>
+        <th>Not sure rate</th><th>Hit rate</th><th>d&prime;</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
   <h2>Export</h2>
   <div class="actions">
     <button class="secondary" id="exportRaw">Download raw responses (CSV)</button>
@@ -148,6 +166,36 @@ async function loadStats() {
     const s = data.responses.by_source[src] || { total: 0, ai: 0, real: 0, not_sure: 0 };
     const tr = document.createElement("tr");
     tr.innerHTML = `<td>${src}</td><td>${s.total}</td><td>${s.ai}</td><td>${s.real}</td><td>${s.not_sure}</td>`;
+    tbody.appendChild(tr);
+  }
+
+  renderKpis(data.kpis);
+}
+
+function pct(v) { return v === null || v === undefined ? "—" : (v * 100).toFixed(1) + "%"; }
+function num(v, digits) { return v === null || v === undefined ? "—" : v.toFixed(digits); }
+
+function renderKpis(kpis) {
+  if (!kpis) return;
+  const oTiles = document.getElementById("overallKpiTiles");
+  oTiles.innerHTML = "";
+  const o = kpis.overall;
+  tile(oTiles, pct(o.accuracy), "Accuracy (overall)");
+  tile(oTiles, pct(o.accuracy_excluding_not_sure), "Accuracy (decided only)");
+  tile(oTiles, pct(o.not_sure_rate), "Not sure rate");
+  tile(oTiles, pct(o.hit_rate), "Hit rate (all checkpoints)");
+  tile(oTiles, pct(o.false_alarm_rate), "False alarm rate (real)");
+  tile(oTiles, num(o.d_prime, 2), "d′ (overall)");
+
+  const tbody = document.querySelector("#kpiTable tbody");
+  tbody.innerHTML = "";
+  const order = ["real", "checkpoint1", "checkpoint2", "checkpoint3", "checkpoint4"];
+  for (const src of order) {
+    const s = kpis.by_source[src] || {};
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${src}</td><td>${s.n ?? 0}</td><td>${pct(s.accuracy)}</td>` +
+      `<td>${pct(s.accuracy_excluding_not_sure)}</td><td>${pct(s.not_sure_rate)}</td>` +
+      `<td>${src === "real" ? "—" : pct(s.hit_rate)}</td><td>${src === "real" ? "—" : num(s.d_prime, 2)}</td>`;
     tbody.appendChild(tr);
   }
 }
