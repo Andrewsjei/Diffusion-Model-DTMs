@@ -23,7 +23,7 @@ window.STUDY_CONTENT = {
   // page depends on how many there are.
 intro_paragraphs: [
   "Hello, thank you for taking part! I trained a diffusion model (AI image " +
-    "generation model) to edit Digital Terrain Models by adding retention " +
+    "generation model) to edit Digital Terrain Models (DTMs) by adding retention " +
     "basins. To assess the results, we would like to know whether the " +
     'generated results look "natural" or "real", and the best way to find ' +
     "out is to ask humans!",
@@ -33,7 +33,7 @@ intro_paragraphs: [
     'in total. For each one, you can choose "Real", "AI-generated", or "Not ' +
     'Sure". There are no wrong answers, just go with your best judgement.',
   "To hone this judgement, let me briefly explain what you will be looking " +
-    "at in a few moments. Digital Terrain Models (DTMs) model the elevation " +
+    "at in a few moments. DTMs model the elevation " +
     "of the terrain in a certain area. Think of the picture as taken from " +
     "the sky facing the ground. The elevation is then stored in the pixel " +
     "value (brightness, or how white the pixel is). This means that darker " +
@@ -42,7 +42,7 @@ intro_paragraphs: [
     "the farther up the slope. The images you will be shown have a retention " +
     "basin in the center of the image. So try to look at the center and see " +
     "if you can see any colour (DTMs are black and white) " + 
-    "or unnatural shapes.",
+    "or unnatural shapes. An example of a real DTM with a retention basin and a (bad) ai-generated one can be seen below for reference",
   "Don't forget to have fun, and send this link to others to challenge them " +
     "and help me with my project! You can leave at any point if you do not " +
     "want to continue, and you can resume later with your code." +
