@@ -45,10 +45,11 @@ intro_paragraphs: [
     "or unnatural shapes. An example of a real DTM with a retention basin and a (bad) ai-generated one can be seen below for reference",
   "Don't forget to have fun, and send this link to others to challenge them " +
     "and help me with my project! You can leave at any point if you do not " +
-    "want to continue, and you can resume later with your code." +
+    "want to continue, and you can resume later with your code." 
   "P.S. I actually hashed them, so I do not know myself, which ones" +
   "are real. If you want to know how well you performed, write me an email" +
-  "with your code, and I will let you know. andrew.ibrahim@tum.de",
+  "with your code, and I will let you know."
+  "andrew.ibrahim@tum.de",
 ],
 
   // Two labeled examples on the intro page, NOT part of the 48 trials.
