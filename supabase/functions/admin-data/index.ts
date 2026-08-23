@@ -1,6 +1,6 @@
 import { json, preflight } from "../_shared/cors.ts";
 import { serviceClient, requireAdmin } from "../_shared/db.ts";
-import { computeKpis, SourceTally } from "../_shared/stats.ts";
+import { computeKpis, computeParticipantKpis, SourceTally } from "../_shared/stats.ts";
 
 Deno.serve(async (req) => {
   const pf = preflight(req);
@@ -19,7 +19,7 @@ Deno.serve(async (req) => {
 
   const { data: responses, error: rErr } = await db
     .from("latest_responses")
-    .select("image_source, response");
+    .select("participant_id, image_source, response");
   if (rErr) return json({ error: rErr.message }, 500);
 
   const completed = participants.filter((p) => p.completed_at).length;
@@ -46,5 +46,6 @@ Deno.serve(async (req) => {
       by_source: bySource,
     },
     kpis: computeKpis(bySource),
+    participant_kpis: computeParticipantKpis(responses ?? [], participants),
   });
 });

@@ -53,6 +53,7 @@ export interface SourceKpi {
   accuracy_excluding_not_sure: number | null; // correct / (n - not_sure)
   not_sure_rate: number | null;
   hit_rate: number | null;                 // AI sources only: P(said "ai" | is AI)
+  false_alarm_rate: number | null;         // P(said "ai" | is real) -- shared across every row, since it's a property of the real/noise pool, not of any one checkpoint
   d_prime: number | null;                  // AI sources only, vs the pooled real false-alarm rate
 }
 
@@ -87,6 +88,7 @@ export function computeKpis(bySource: Record<string, SourceTally>): Kpis {
       ? real_correct / (real.total - real.not_sure) : null,
     not_sure_rate: real.total ? real.not_sure / real.total : null,
     hit_rate: null,
+    false_alarm_rate: falseAlarmRate,
     d_prime: null,
   };
   overallN += real.total; overallCorrect += real_correct; overallNotSure += real.not_sure;
@@ -104,6 +106,7 @@ export function computeKpis(bySource: Record<string, SourceTally>): Kpis {
       accuracy_excluding_not_sure: (s.total - s.not_sure) ? correct / (s.total - s.not_sure) : null,
       not_sure_rate: s.total ? s.not_sure / s.total : null,
       hit_rate: hitRate,
+      false_alarm_rate: falseAlarmRate,
       d_prime: dPrime,
     };
     pooledAiN += s.total; pooledAiHits += s.ai;
@@ -127,4 +130,54 @@ export function computeKpis(bySource: Record<string, SourceTally>): Kpis {
     },
     by_source: bySourceKpi,
   };
+}
+
+export interface ParticipantKpi {
+  participant_id: string;
+  completed: boolean;
+  n: number;
+  accuracy: number | null;
+  accuracy_excluding_not_sure: number | null;
+  not_sure_rate: number | null;
+  hit_rate: number | null;         // across this participant's checkpoint (AI) trials only
+  false_alarm_rate: number | null; // across this participant's real trials only
+}
+
+// Same accuracy/hit/false-alarm/not-sure definitions as computeKpis, just
+// grouped by participant instead of pooled across everyone. No d-prime
+// here -- 24 real + 24 AI trials per participant is thin enough that a
+// per-participant d' would mostly be noise, and it wasn't asked for.
+export function computeParticipantKpis(
+  responses: { participant_id: string; image_source: string; response: "ai" | "real" | "not_sure" }[],
+  participants: { participant_id: string; completed_at: string | null }[],
+): ParticipantKpi[] {
+  const real = new Map<string, SourceTally>();
+  const ai = new Map<string, SourceTally>();
+  const emptyTally = (): SourceTally => ({ ai: 0, real: 0, not_sure: 0, total: 0 });
+
+  for (const r of responses) {
+    const bucket = r.image_source === "real" ? real : ai;
+    const t = bucket.get(r.participant_id) ?? emptyTally();
+    t[r.response]++;
+    t.total++;
+    bucket.set(r.participant_id, t);
+  }
+
+  return participants.map((p) => {
+    const realT = real.get(p.participant_id) ?? emptyTally();
+    const aiT = ai.get(p.participant_id) ?? emptyTally();
+    const n = realT.total + aiT.total;
+    const correct = realT.real + aiT.ai;
+    const notSure = realT.not_sure + aiT.not_sure;
+    return {
+      participant_id: p.participant_id,
+      completed: !!p.completed_at,
+      n,
+      accuracy: n ? correct / n : null,
+      accuracy_excluding_not_sure: (n - notSure) ? correct / (n - notSure) : null,
+      not_sure_rate: n ? notSure / n : null,
+      hit_rate: aiT.total ? aiT.ai / aiT.total : null,
+      false_alarm_rate: realT.total ? realT.ai / realT.total : null,
+    };
+  });
 }

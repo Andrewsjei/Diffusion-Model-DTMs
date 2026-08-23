@@ -40,12 +40,13 @@ input[type=text]{width:100%;padding:.7em .9em;font:inherit;border:1px solid var(
 .track{height:8px;background:var(--line);border-radius:4px;overflow:hidden;margin-bottom:1.6em}
 .fill{height:100%;background:var(--accent);transition:width .2s}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:18px;margin-bottom:1.6em}
-/* Desktop: lock to 4 columns x 2 rows for the 8 trials on a page. Below
-   this width, .grid falls back to the auto-fill rule above, which packs
-   as many ~230px columns as fit (typically 1-2 on a phone). */
-@media (min-width:900px){
-  .wrap{max-width:1160px}
-  .grid{grid-template-columns:repeat(4,1fr)}
+/* Desktop: lock to 2 columns x 4 rows for the 8 trials on a page, so
+   each image renders larger. Below this width, .grid falls back to the
+   auto-fill rule above, which packs as many ~230px columns as fit
+   (typically 1-2 on a phone). */
+@media (min-width:700px){
+  .wrap{max-width:760px}
+  .grid{grid-template-columns:repeat(2,1fr)}
 }
 .trial{background:var(--surface-1);border:1px solid var(--line);border-radius:12px;padding:12px}
 .trial img{width:100%;aspect-ratio:1/1;object-fit:contain;border-radius:8px;background:var(--surface-2);display:block;margin-bottom:.7em}

@@ -76,7 +76,18 @@ th{font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;color:var(--te
     <table id="kpiTable">
       <thead><tr>
         <th>Source</th><th>N</th><th>Accuracy</th><th>Accuracy (decided only)</th>
-        <th>Not sure rate</th><th>Hit rate</th><th>d&prime;</th>
+        <th>Hit rate</th><th>False alarm rate</th><th>Not sure rate</th><th>d&prime;</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <h2>By participant</h2>
+  <div style="overflow-x:auto">
+    <table id="participantKpiTable">
+      <thead><tr>
+        <th>Participant</th><th>Completed</th><th>N</th><th>Accuracy</th>
+        <th>Hit rate</th><th>False alarm rate</th><th>Not sure rate</th>
       </tr></thead>
       <tbody></tbody>
     </table>
@@ -170,6 +181,7 @@ async function loadStats() {
   }
 
   renderKpis(data.kpis);
+  renderParticipantKpis(data.participant_kpis);
 }
 
 function pct(v) { return v === null || v === undefined ? "—" : (v * 100).toFixed(1) + "%"; }
@@ -194,8 +206,21 @@ function renderKpis(kpis) {
     const s = kpis.by_source[src] || {};
     const tr = document.createElement("tr");
     tr.innerHTML = `<td>${src}</td><td>${s.n ?? 0}</td><td>${pct(s.accuracy)}</td>` +
-      `<td>${pct(s.accuracy_excluding_not_sure)}</td><td>${pct(s.not_sure_rate)}</td>` +
-      `<td>${src === "real" ? "—" : pct(s.hit_rate)}</td><td>${src === "real" ? "—" : num(s.d_prime, 2)}</td>`;
+      `<td>${pct(s.accuracy_excluding_not_sure)}</td>` +
+      `<td>${src === "real" ? "—" : pct(s.hit_rate)}</td><td>${pct(s.false_alarm_rate)}</td>` +
+      `<td>${pct(s.not_sure_rate)}</td><td>${src === "real" ? "—" : num(s.d_prime, 2)}</td>`;
+    tbody.appendChild(tr);
+  }
+}
+
+function renderParticipantKpis(rows) {
+  const tbody = document.querySelector("#participantKpiTable tbody");
+  tbody.innerHTML = "";
+  for (const p of rows || []) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${p.participant_id}</td><td>${p.completed ? "yes" : "no"}</td>` +
+      `<td>${p.n}</td><td>${pct(p.accuracy)}</td><td>${pct(p.hit_rate)}</td>` +
+      `<td>${pct(p.false_alarm_rate)}</td><td>${pct(p.not_sure_rate)}</td>`;
     tbody.appendChild(tr);
   }
 }
