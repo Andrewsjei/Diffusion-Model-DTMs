@@ -36,3 +36,26 @@ export async function requireAdmin(req: Request): Promise<string | null> {
 
   return allowed ? data.user.id : null;
 }
+
+// PostgREST caps any single response at 1000 rows by default (the
+// project's "Max Rows" setting) -- a plain .select() on a table past
+// that size silently truncates rather than erroring. This walks pages
+// of PAGE_SIZE via .range() until a short page confirms there's no more,
+// so callers always get every row regardless of table size.
+const PAGE_SIZE = 1000;
+
+export async function fetchAllRows<T>(
+  makeQuery: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>,
+): Promise<T[]> {
+  const all: T[] = [];
+  let from = 0;
+  for (;;) {
+    const { data, error } = await makeQuery(from, from + PAGE_SIZE - 1);
+    if (error) throw new Error(error.message);
+    if (!data || data.length === 0) break;
+    all.push(...data);
+    if (data.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
+  }
+  return all;
+}

@@ -1,5 +1,5 @@
 import { json, preflight } from "../_shared/cors.ts";
-import { serviceClient, requireAdmin } from "../_shared/db.ts";
+import { serviceClient, requireAdmin, fetchAllRows } from "../_shared/db.ts";
 import { computeKpis, computeParticipantKpis, SourceTally } from "../_shared/stats.ts";
 
 Deno.serve(async (req) => {
@@ -12,15 +12,18 @@ Deno.serve(async (req) => {
 
   const db = serviceClient();
 
-  const { data: participants, error: pErr } = await db
-    .from("participants")
-    .select("participant_id, completed_at");
-  if (pErr) return json({ error: pErr.message }, 500);
-
-  const { data: responses, error: rErr } = await db
-    .from("latest_responses")
-    .select("participant_id, image_source, response");
-  if (rErr) return json({ error: rErr.message }, 500);
+  let participants: { participant_id: string; completed_at: string | null }[];
+  let responses: { participant_id: string; image_source: string; response: "ai" | "real" | "not_sure" }[];
+  try {
+    participants = await fetchAllRows((from, to) =>
+      db.from("participants").select("participant_id, completed_at").range(from, to)
+    );
+    responses = await fetchAllRows((from, to) =>
+      db.from("latest_responses").select("participant_id, image_source, response").range(from, to)
+    );
+  } catch (e) {
+    return json({ error: (e as Error).message }, 500);
+  }
 
   const completed = participants.filter((p) => p.completed_at).length;
 

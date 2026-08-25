@@ -1,5 +1,5 @@
 import { corsHeaders, preflight, json } from "../_shared/cors.ts";
-import { serviceClient, requireAdmin } from "../_shared/db.ts";
+import { serviceClient, requireAdmin, fetchAllRows } from "../_shared/db.ts";
 import { CHECKPOINTS } from "../_shared/config.ts";
 
 function csvEscape(v: unknown): string {
@@ -50,21 +50,32 @@ Deno.serve(async (req) => {
 
   const db = serviceClient();
 
-  const { data: responses, error: rErr } = await db
-    .from("latest_responses")
-    .select(
-      "participant_id, trial_number, page, image_id, image_source, response, response_time_ms, submitted_at, trial_sequence_id, experiment_version",
-    )
-    .order("participant_id")
-    .order("trial_number");
-  if (rErr) return json({ error: rErr.message }, 500);
+  // PostgREST caps a single response at 1000 rows by default -- fetch in
+  // pages so a study past that size (this one already is) isn't silently
+  // truncated. .order() has to stay on every page for a stable overall
+  // ordering across the walk.
+  let responses: ResponseRow[];
+  try {
+    responses = await fetchAllRows<ResponseRow>((from, to) =>
+      db
+        .from("latest_responses")
+        .select(
+          "participant_id, trial_number, page, image_id, image_source, response, response_time_ms, submitted_at, trial_sequence_id, experiment_version",
+        )
+        .order("participant_id")
+        .order("trial_number")
+        .range(from, to)
+    );
+  } catch (e) {
+    return json({ error: (e as Error).message }, 500);
+  }
 
   if (type === "raw") {
     const header = [
       "participant_id", "trial_number", "page", "image_id", "image_source",
       "response", "response_time_ms", "submitted_at", "trial_sequence_id", "experiment_version",
     ];
-    const rows = (responses as ResponseRow[]).map((r) => [
+    const rows = responses.map((r) => [
       r.participant_id, r.trial_number, r.page, r.image_id, r.image_source,
       r.response, r.response_time_ms, r.submitted_at, r.trial_sequence_id, r.experiment_version,
     ]);
@@ -76,10 +87,14 @@ Deno.serve(async (req) => {
   // accuracy/d-prime: those are one formula away in R/Python from hit,
   // miss, false-alarm counts, and baking a specific definition in here
   // would just be something to disagree with later.
-  const { data: participants, error: pErr } = await db
-    .from("participants")
-    .select("participant_id, created_at, completed_at");
-  if (pErr) return json({ error: pErr.message }, 500);
+  let participants: { participant_id: string; created_at: string; completed_at: string | null }[];
+  try {
+    participants = await fetchAllRows((from, to) =>
+      db.from("participants").select("participant_id, created_at, completed_at").range(from, to)
+    );
+  } catch (e) {
+    return json({ error: (e as Error).message }, 500);
+  }
 
   type Tally = { n: number; said_ai: number; said_real: number; said_notsure: number };
   const emptyTally = (): Tally => ({ n: 0, said_ai: 0, said_real: 0, said_notsure: 0 });
@@ -91,7 +106,7 @@ Deno.serve(async (req) => {
       cp: Object.fromEntries(CHECKPOINTS.map((c) => [c, emptyTally()])),
     });
   }
-  for (const r of responses as ResponseRow[]) {
+  for (const r of responses) {
     const rec = byParticipant.get(r.participant_id);
     if (!rec) continue;
     const tally = r.image_source === "real" ? rec.real : rec.cp[r.image_source];
