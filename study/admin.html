@@ -68,8 +68,12 @@ th{font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;color:var(--te
   <p style="color:var(--text-secondary);font-size:.85rem;margin-top:-.6em">
     "Correct" means real images called Real, AI images called AI-generated; "Not sure" counts
     as incorrect in <b>Accuracy</b> and is excluded from <b>Accuracy (decided only)</b>.
-    Hit rate / false-alarm rate / d&prime; are the standard signal-detection framing:
-    a checkpoint's d&prime; compares its hit rate against the false-alarm rate on real images.
+    The <b>Hit rate</b> / <b>False alarm rate</b> columns also count "Not sure" as incorrect
+    (out of all trials shown). <b>d&prime;</b> is different on purpose: it's computed only from
+    decided trials (Real / AI-generated answers) with "Not sure" excluded entirely from both the
+    hit rate and the false-alarm rate that feed it, so guessing "Not sure" a lot neither helps
+    nor hurts a checkpoint's d&prime; -- it can come out slightly different from what
+    z(Hit rate) − z(False alarm rate) on this table would give you by hand.
   </p>
   <div class="tiles" id="overallKpiTiles"></div>
   <div style="overflow-x:auto;margin-top:1em">

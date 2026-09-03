@@ -54,7 +54,7 @@ export interface SourceKpi {
   not_sure_rate: number | null;
   hit_rate: number | null;                 // AI sources only: P(said "ai" | is AI)
   false_alarm_rate: number | null;         // P(said "ai" | is real) -- shared across every row, since it's a property of the real/noise pool, not of any one checkpoint
-  d_prime: number | null;                  // AI sources only, vs the pooled real false-alarm rate
+  d_prime: number | null;                  // AI sources only, vs the real false-alarm rate -- "not sure" trials excluded from both rates entirely, not counted as incorrect
 }
 
 export interface Kpis {
@@ -62,9 +62,9 @@ export interface Kpis {
     accuracy: number | null;
     accuracy_excluding_not_sure: number | null;
     not_sure_rate: number | null;
-    hit_rate: number | null;         // pooled across all four checkpoints
+    hit_rate: number | null;         // pooled across all active AI pools
     false_alarm_rate: number | null; // P(said "ai" | is real)
-    d_prime: number | null;
+    d_prime: number | null;          // "not sure" excluded from both rates entirely, see SourceKpi.d_prime
   };
   by_source: Record<string, SourceKpi>;
 }
@@ -72,10 +72,18 @@ export interface Kpis {
 export function computeKpis(bySource: Record<string, SourceTally>): Kpis {
   const real = bySource["real"] ?? { ai: 0, real: 0, not_sure: 0, total: 0 };
   const falseAlarmRate = real.total ? real.ai / real.total : null;
-  const zFalseAlarm = probit(correctedRate(real.ai, real.total || 0));
+
+  // d-prime is computed on decided trials only -- "not sure" is excluded
+  // from its denominator entirely, rather than counted as an implicit
+  // miss/correct-rejection. This only affects d-prime: the displayed
+  // hit_rate / false_alarm_rate / accuracy fields below stay inclusive
+  // of "not sure", unchanged.
+  const realDecidedN = real.total - real.not_sure;
+  const zFalseAlarmDecided = probit(correctedRate(real.ai, realDecidedN));
 
   const checkpointKeys = Object.keys(bySource).filter((k) => k !== "real");
   let pooledAiN = 0, pooledAiHits = 0;
+  let pooledDecidedN = 0;
   let overallN = 0, overallCorrect = 0, overallNotSure = 0;
 
   const bySourceKpi: Record<string, SourceKpi> = {};
@@ -97,8 +105,9 @@ export function computeKpis(bySource: Record<string, SourceTally>): Kpis {
     const s = bySource[key];
     const correct = s.ai; // "correct" for an AI-sourced image means the participant said "ai"
     const hitRate = s.total ? s.ai / s.total : null;
-    const dPrime = s.total
-      ? probit(correctedRate(s.ai, s.total)) - zFalseAlarm
+    const decidedN = s.total - s.not_sure;
+    const dPrime = decidedN
+      ? probit(correctedRate(s.ai, decidedN)) - zFalseAlarmDecided
       : null;
     bySourceKpi[key] = {
       n: s.total,
@@ -109,13 +118,13 @@ export function computeKpis(bySource: Record<string, SourceTally>): Kpis {
       false_alarm_rate: falseAlarmRate,
       d_prime: dPrime,
     };
-    pooledAiN += s.total; pooledAiHits += s.ai;
+    pooledAiN += s.total; pooledAiHits += s.ai; pooledDecidedN += decidedN;
     overallN += s.total; overallCorrect += correct; overallNotSure += s.not_sure;
   }
 
   const pooledHitRate = pooledAiN ? pooledAiHits / pooledAiN : null;
-  const overallDPrime = pooledAiN
-    ? probit(correctedRate(pooledAiHits, pooledAiN)) - zFalseAlarm
+  const overallDPrime = pooledDecidedN
+    ? probit(correctedRate(pooledAiHits, pooledDecidedN)) - zFalseAlarmDecided
     : null;
 
   return {
