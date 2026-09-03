@@ -1,0 +1,10 @@
+{
+  "lora_name": null,
+  "output_directory": "/home/aibrahim/Documents/Evaluator/generated/RetentionInpaintingBaseSDM3.5/sd35/base",
+  "model_family": "sd35",
+  "use_lora": false,
+  "images_requested": 100,
+  "images_processed": 100,
+  "images_failed": 0,
+  "failures": []
+}
