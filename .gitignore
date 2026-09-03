@@ -9,3 +9,4 @@ __pycache__/
 # Supabase CLI local state.
 .supabase/
 supabase/.temp/
+.claude/

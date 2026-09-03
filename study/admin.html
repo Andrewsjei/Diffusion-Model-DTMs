@@ -172,7 +172,7 @@ async function loadStats() {
 
   const tbody = document.querySelector("#sourceTable tbody");
   tbody.innerHTML = "";
-  const order = ["real", "checkpoint1", "checkpoint2", "checkpoint3", "checkpoint4"];
+  const order = sourceOrder(data.responses.by_source);
   for (const src of order) {
     const s = data.responses.by_source[src] || { total: 0, ai: 0, real: 0, not_sure: 0 };
     const tr = document.createElement("tr");
@@ -187,6 +187,14 @@ async function loadStats() {
 function pct(v) { return v === null || v === undefined ? "—" : (v * 100).toFixed(1) + "%"; }
 function num(v, digits) { return v === null || v === undefined ? "—" : v.toFixed(digits); }
 
+// "real" first, then whatever other source types are actually present
+// (checkpoints, BaseModel folders, anything future), alphabetically --
+// no fixed list, so this needs no edits when the active pools change.
+function sourceOrder(bySource) {
+  const rest = Object.keys(bySource).filter((k) => k !== "real").sort();
+  return bySource.real !== undefined ? ["real", ...rest] : rest;
+}
+
 function renderKpis(kpis) {
   if (!kpis) return;
   const oTiles = document.getElementById("overallKpiTiles");
@@ -195,13 +203,13 @@ function renderKpis(kpis) {
   tile(oTiles, pct(o.accuracy), "Accuracy (overall)");
   tile(oTiles, pct(o.accuracy_excluding_not_sure), "Accuracy (decided only)");
   tile(oTiles, pct(o.not_sure_rate), "Not sure rate");
-  tile(oTiles, pct(o.hit_rate), "Hit rate (all checkpoints)");
+  tile(oTiles, pct(o.hit_rate), "Hit rate (all active AI pools)");
   tile(oTiles, pct(o.false_alarm_rate), "False alarm rate (real)");
   tile(oTiles, num(o.d_prime, 2), "d′ (overall)");
 
   const tbody = document.querySelector("#kpiTable tbody");
   tbody.innerHTML = "";
-  const order = ["real", "checkpoint1", "checkpoint2", "checkpoint3", "checkpoint4"];
+  const order = sourceOrder(kpis.by_source);
   for (const src of order) {
     const s = kpis.by_source[src] || {};
     const tr = document.createElement("tr");

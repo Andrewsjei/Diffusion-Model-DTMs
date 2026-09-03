@@ -75,30 +75,59 @@ push, done.
 
 ## Adding or removing images
 
-Drop image files (`.jpg`/`.jpeg`/`.png`/`.webp`) into the matching
-folder under `study/source-images/`:
+There's no fixed list of pool names — any folder you create under
+`study/source-images/<name>/` becomes a usable pool, `<name>` and all.
+Drop image files (`.jpg`/`.jpeg`/`.png`/`.webp`) in there, e.g.:
 ```
 study/source-images/real/
 study/source-images/checkpoint1/
-study/source-images/checkpoint2/
-study/source-images/checkpoint3/
-study/source-images/checkpoint4/
+study/source-images/BaseModel1.5/
+study/source-images/anything-you-want/
 ```
 Then run, from the repo root:
 ```bash
 cp scripts/.env.example scripts/.env   # first time only
-# edit scripts/.env with your Project URL + service_role key
+# edit scripts/.env with your Project URL + secret key
 python3 scripts/sync_images.py
 ```
-This copies each file into `study/images/pool/` under a content-hashed
-filename and registers it in the `images` table. Removing a file from
-`source-images/` and re-running the script marks it inactive (it stops
-being drawn for new participants; already-collected data referencing it
-is untouched). Commit the new files under `study/images/pool/` and push.
+This scans every folder under `source-images/`, copies each new file
+into `study/images/pool/` under a content-hashed filename, and
+registers it in the `images` table (new pools start active; commit the
+new files under `study/images/pool/` and push). Removing a file and
+re-running the script marks that one image inactive — already-collected
+data referencing it is untouched, and it stops being drawn for new
+participants. It never touches the `active` flag on images it already
+knows about, so re-running it can't undo a pool-level decision made
+with the script below.
 
-You need at least 6 active images per checkpoint and 24 active real
-images before `start-session` can build a full sequence — it returns a
-clear error naming the shortfall if not.
+## Choosing which AI pool(s) are actually shown
+
+`real` is always active. Which non-real pool(s) participants currently
+see is a separate, instant decision — nothing is deleted or moved:
+```bash
+python3 scripts/set_active_pools.py BaseModel1.5 BaseModel3.5
+```
+This flips `images.active` for every pool: `true` for the ones you
+listed, `false` for every other pool that has ever been registered.
+Past sessions and their responses are completely unaffected either way
+— this only changes what `start-session` draws from for *new*
+participants going forward. Run it again with a different set (or the
+old checkpoint names) to switch back at any time.
+
+Each participant always sees 24 real + 24 AI images, split into 3
+balanced blocks of 16 trials (8 real + 8 AI each). The 8 AI slots per
+block have to divide evenly across however many pools are active, so
+the pool count must be **1, 2, 4, or 8** — e.g. 2 pools -> 4 each per
+block, 12 each overall; 4 pools -> 2 each per block, 6 each overall (the
+original checkpoint1-4 setup). Anything else (3, 5, 6, 7 pools) leaves
+a fractional slot; the script refuses to set that up, and if it's ever
+reached some other way, `start-session` fails with a clear error rather
+than silently building an unbalanced sequence.
+
+You need at least (24 / number of active pools) active images in each
+active pool, and 24 active real images, before `start-session` can
+build a full sequence — it returns a clear error naming the shortfall
+if not.
 
 The two intro-page examples are separate: replace
 `study/images/examples/real-example.png` and `ai-example.png` directly

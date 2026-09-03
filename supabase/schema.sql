@@ -13,7 +13,11 @@
 
 create table if not exists images (
   image_id     text primary key,
-  source_type  text not null check (source_type in ('real','checkpoint1','checkpoint2','checkpoint3','checkpoint4')),
+  -- 'real', or the name of any folder under study/source-images/ (e.g.
+  -- 'checkpoint1', 'BaseModel1.5') -- not a fixed enum, since which AI
+  -- source folders are in use is chosen at runtime via
+  -- scripts/set_active_pools.py, not hardcoded here.
+  source_type  text not null check (source_type ~ '^[A-Za-z0-9_.-]+$' and length(source_type) between 1 and 64),
   storage_path text not null,               -- e.g. images/pool/ab12cd34ef.jpg — relative to study/, served by GitHub Pages
   active       boolean not null default true,
   times_shown  integer not null default 0,  -- incremented by start-session; keeps exposure roughly even across participants
@@ -36,7 +40,7 @@ create table if not exists responses (
   trial_number       integer not null,
   page               integer not null,
   image_id           text not null,
-  image_source       text not null,           -- real / checkpoint1..4 — the ground truth, stamped server-side from trial_sequence, never trusted from the client
+  image_source       text not null,           -- real, or whichever AI pool was active (e.g. checkpoint1, BaseModel1.5) — the ground truth, stamped server-side from trial_sequence, never trusted from the client
   response           text not null check (response in ('ai','real','not_sure')),
   response_time_ms   integer,
   trial_sequence_id  text not null,

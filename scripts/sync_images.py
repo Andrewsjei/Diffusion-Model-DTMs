@@ -13,10 +13,22 @@ SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY — copy scripts/.env.example
 to scripts/.env and fill those in first. scripts/.env is gitignored;
 the service_role key must never be committed or shipped to the browser.
 
+Scans every folder under study/source-images/ automatically -- there is
+no fixed list of pool names. Add a new folder (any name: 'checkpoint5',
+'BaseModel1.5', whatever) and this script picks it up on the next run;
+which pools are actually served to participants is a separate decision,
+made with scripts/set_active_pools.py.
+
 What it does, for each study/source-images/<pool>/* file:
   1. hashes the file's contents (sha256, first 16 hex chars) -> image_id
   2. copies it to study/images/pool/<image_id>.<ext> if not already there
-  3. upserts a row in the `images` table: {image_id, source_type, storage_path, active: true}
+  3. inserts a row in the `images` table for image_ids not already
+     registered: {image_id, source_type, storage_path, active: true}
+Already-registered image_ids are left completely alone -- in
+particular, this never touches `active` on an existing row, so it
+can't undo a pool you deliberately deactivated with
+set_active_pools.py just because you added one more file to it.
+
 Then, for each pool, any image_id previously registered under that
 source_type but no longer present in source-images/ is marked
 active: false (soft delete — the row and file stay, so past sessions
@@ -36,7 +48,6 @@ ROOT = Path(__file__).resolve().parent.parent
 STUDY = ROOT / "study"
 SOURCE = STUDY / "source-images"
 POOL_DIR = STUDY / "images" / "pool"
-POOLS = ["real", "checkpoint1", "checkpoint2", "checkpoint3", "checkpoint4"]
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
 
 
@@ -101,46 +112,60 @@ def main():
         )
 
     POOL_DIR.mkdir(parents=True, exist_ok=True)
+    SOURCE.mkdir(parents=True, exist_ok=True)
 
-    total_registered = 0
-    for pool in POOLS:
+    pools = sorted(p.name for p in SOURCE.iterdir() if p.is_dir())
+    if not pools:
+        sys.exit(f"No folders found under {SOURCE}/ -- nothing to sync.")
+
+    total_new = 0
+    for pool in pools:
         src_dir = SOURCE / pool
-        src_dir.mkdir(parents=True, exist_ok=True)
         files = [p for p in sorted(src_dir.iterdir()) if p.suffix.lower() in IMAGE_EXTS]
 
         present_ids = []
-        rows = []
         for f in files:
-            image_id = hash_file(f)
+            present_ids.append(hash_file(f))
+
+        # Fetch what's already registered for this pool BEFORE writing
+        # anything, so newly-inserted rows never get mistaken for stale.
+        existing = rest_request(
+            url, key, "GET",
+            f"/rest/v1/images?source_type=eq.{pool}&select=image_id",
+        ) or []
+        existing_ids = {r["image_id"] for r in existing}
+
+        new_rows = []
+        for f, image_id in zip(files, present_ids):
             dest = POOL_DIR / f"{image_id}{f.suffix.lower()}"
             if not dest.exists():
                 shutil.copyfile(f, dest)
-            present_ids.append(image_id)
-            rows.append({
+            if image_id in existing_ids:
+                continue  # already registered -- active status is left exactly as it is
+            new_rows.append({
                 "image_id": image_id,
                 "source_type": pool,
                 "storage_path": f"images/pool/{dest.name}",
                 "active": True,
             })
 
-        if rows:
+        if new_rows:
             rest_request(
                 url, key, "POST", "/rest/v1/images",
-                body=rows,
-                extra_headers={"Prefer": "resolution=merge-duplicates,return=minimal"},
+                body=new_rows,
+                extra_headers={"Prefer": "return=minimal"},
             )
-            total_registered += len(rows)
-            print(f"{pool}: {len(rows)} image(s) registered/updated")
+            total_new += len(new_rows)
+            print(f"{pool}: {len(new_rows)} new image(s) registered "
+                  f"({len(present_ids) - len(new_rows)} already were)")
+        elif files:
+            print(f"{pool}: {len(present_ids)} image(s), all already registered")
         else:
             print(f"{pool}: no images found in study/source-images/{pool}/")
 
         # Soft-delete anything previously registered under this pool that
         # is no longer present in source-images/.
-        existing = rest_request(
-            url, key, "GET",
-            f"/rest/v1/images?source_type=eq.{pool}&select=image_id",
-        ) or []
-        stale = [r["image_id"] for r in existing if r["image_id"] not in present_ids]
+        stale = [i for i in existing_ids if i not in present_ids]
         if stale:
             ids_filter = ",".join(stale)
             rest_request(
@@ -150,7 +175,8 @@ def main():
             )
             print(f"{pool}: deactivated {len(stale)} image(s) no longer in source-images/")
 
-    print(f"\nDone. {total_registered} image(s) registered across all pools.")
+    print(f"\nDone. {total_new} new image(s) registered across {len(pools)} pool(s): {', '.join(pools)}")
+    print("Run scripts/set_active_pools.py to choose which non-real pools are actually shown to participants.")
 
 
 if __name__ == "__main__":

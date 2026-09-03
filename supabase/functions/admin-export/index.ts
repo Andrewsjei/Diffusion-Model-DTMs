@@ -1,6 +1,5 @@
 import { corsHeaders, preflight, json } from "../_shared/cors.ts";
 import { serviceClient, requireAdmin, fetchAllRows } from "../_shared/db.ts";
-import { CHECKPOINTS } from "../_shared/config.ts";
 
 function csvEscape(v: unknown): string {
   const s = v === null || v === undefined ? "" : String(v);
@@ -96,6 +95,14 @@ Deno.serve(async (req) => {
     return json({ error: (e as Error).message }, 500);
   }
 
+  // Non-real source types, derived from whatever's actually in the data
+  // rather than a fixed list -- so this covers every pool that's ever
+  // been used (checkpoints, BaseModel folders, whatever comes next)
+  // without needing an edit here when the active pools change.
+  const nonRealSources = [...new Set(responses.map((r) => r.image_source))]
+    .filter((s) => s !== "real")
+    .sort();
+
   type Tally = { n: number; said_ai: number; said_real: number; said_notsure: number };
   const emptyTally = (): Tally => ({ n: 0, said_ai: 0, said_real: 0, said_notsure: 0 });
 
@@ -103,7 +110,7 @@ Deno.serve(async (req) => {
   for (const p of participants) {
     byParticipant.set(p.participant_id, {
       real: emptyTally(),
-      cp: Object.fromEntries(CHECKPOINTS.map((c) => [c, emptyTally()])),
+      cp: Object.fromEntries(nonRealSources.map((c) => [c, emptyTally()])),
     });
   }
   for (const r of responses) {
@@ -120,17 +127,17 @@ Deno.serve(async (req) => {
   const header = [
     "participant_id", "created_at", "completed_at", "n_responses",
     "real_n", "real_said_real", "real_said_ai", "real_said_notsure",
-    ...CHECKPOINTS.flatMap((c) => [
+    ...nonRealSources.flatMap((c) => [
       `${c}_n`, `${c}_said_ai`, `${c}_said_real`, `${c}_said_notsure`,
     ]),
   ];
   const rows = participants.map((p) => {
     const rec = byParticipant.get(p.participant_id)!;
-    const nResponses = rec.real.n + CHECKPOINTS.reduce((s, c) => s + rec.cp[c].n, 0);
+    const nResponses = rec.real.n + nonRealSources.reduce((s, c) => s + rec.cp[c].n, 0);
     return [
       p.participant_id, p.created_at, p.completed_at ?? "", nResponses,
       rec.real.n, rec.real.said_real, rec.real.said_ai, rec.real.said_notsure,
-      ...CHECKPOINTS.flatMap((c) => [
+      ...nonRealSources.flatMap((c) => [
         rec.cp[c].n, rec.cp[c].said_ai, rec.cp[c].said_real, rec.cp[c].said_notsure,
       ]),
     ];

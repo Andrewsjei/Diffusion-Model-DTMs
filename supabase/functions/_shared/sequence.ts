@@ -1,9 +1,7 @@
 import {
+  AI_PER_BLOCK,
   BLOCKS,
-  CHECKPOINTS,
   IMAGES_PER_PAGE,
-  PER_CHECKPOINT_PER_BLOCK,
-  PER_CHECKPOINT_TOTAL,
   REAL_PER_BLOCK,
   REAL_TOTAL,
   SourceType,
@@ -55,6 +53,19 @@ async function pickImages(
   return pool.slice(0, count);
 }
 
+// Which non-real pools participants currently see -- driven entirely by
+// images.active, which scripts/set_active_pools.py flips. Nothing here
+// hardcodes a list of checkpoint/model names.
+async function getActivePools(db: ReturnType<typeof serviceClient>): Promise<string[]> {
+  const { data, error } = await db
+    .from("images")
+    .select("source_type")
+    .eq("active", true)
+    .neq("source_type", "real");
+  if (error) throw new Error(`active pools query failed: ${error.message}`);
+  return [...new Set((data ?? []).map((r) => r.source_type as string))].sort();
+}
+
 function chunk<T>(arr: T[], size: number): T[][] {
   const out: T[][] = [];
   for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
@@ -69,18 +80,20 @@ function fisherYates<T>(arr: T[]): T[] {
   return arr;
 }
 
-// Interleaves one 16-trial block (8 real + 2 of each of 4 checkpoints, per
-// config.ts) so no two adjacent trials share a source type. `seedLast`,
-// when given, is the source type of the last trial of the *previous*
-// block, so the boundary between blocks is covered too, not just each
-// block's interior.
+// Interleaves one 16-trial block (8 real + the AI slots split evenly
+// across however many pools are active, per config.ts) so no two
+// adjacent trials share a source type. `seedLast`, when given, is the
+// source type of the last trial of the *previous* block, so the
+// boundary between blocks is covered too, not just each block's
+// interior.
 //
 // This is the classic "reorganize string" greedy: repeatedly take the
 // item from whichever remaining group is both (a) not equal to the type
 // just placed and (b) has the most items left. That greedy choice is
 // provably always able to finish without a same-type collision whenever
-// no group holds more than half the items (ceil(n/2)) — which is exactly
-// our case: real is 8 of 16, the maximum. An earlier version of this
+// no group holds more than half the items (ceil(n/2)) — which always
+// holds here since real is a fixed 8 of 16 and every AI pool's share is
+// AI_PER_BLOCK / pool-count <= 8. An earlier version of this
 // function used rejection-sampled random shuffles instead, which sounds
 // equivalent but isn't: a random permutation of 8-of-16 non-adjacent
 // items succeeds only ~0.07% of the time (9 valid placements out of
@@ -130,16 +143,32 @@ function shuffleBlock<T extends { source_type: SourceType }>(
 export async function buildSequence(): Promise<Trial[]> {
   const db = serviceClient();
 
+  const pools = await getActivePools(db);
+  if (pools.length === 0) {
+    throw new Error(
+      "No active AI image pool. Run scripts/set_active_pools.py to activate at least one.",
+    );
+  }
+  if (AI_PER_BLOCK % pools.length !== 0) {
+    throw new Error(
+      `${pools.length} active AI pool(s) (${pools.join(", ")}) can't split evenly across the ` +
+      `${AI_PER_BLOCK} AI slots in each block. Use a pool count that divides ${AI_PER_BLOCK} ` +
+      `(e.g. 1, 2, 4, or 8) -- see scripts/set_active_pools.py.`,
+    );
+  }
+  const perPoolPerBlock = AI_PER_BLOCK / pools.length;
+  const perPoolTotal = perPoolPerBlock * BLOCKS;
+
   const real = await pickImages(db, "real", REAL_TOTAL);
-  const byCheckpoint: Record<string, ImageRow[]> = {};
-  for (const cp of CHECKPOINTS) {
-    byCheckpoint[cp] = await pickImages(db, cp, PER_CHECKPOINT_TOTAL);
+  const byPool: Record<string, ImageRow[]> = {};
+  for (const p of pools) {
+    byPool[p] = await pickImages(db, p, perPoolTotal);
   }
 
   const realBlocks = chunk(real, REAL_PER_BLOCK);
-  const checkpointBlocks: Record<string, ImageRow[][]> = {};
-  for (const cp of CHECKPOINTS) {
-    checkpointBlocks[cp] = chunk(byCheckpoint[cp], PER_CHECKPOINT_PER_BLOCK);
+  const poolBlocks: Record<string, ImageRow[][]> = {};
+  for (const p of pools) {
+    poolBlocks[p] = chunk(byPool[p], perPoolPerBlock);
   }
 
   const trials: Trial[] = [];
@@ -148,7 +177,7 @@ export async function buildSequence(): Promise<Trial[]> {
   for (let b = 0; b < BLOCKS; b++) {
     const blockItems: ImageRow[] = [
       ...realBlocks[b],
-      ...CHECKPOINTS.flatMap((cp) => checkpointBlocks[cp][b]),
+      ...pools.flatMap((p) => poolBlocks[p][b]),
     ];
     const ordered = shuffleBlock(blockItems, lastType);
     lastType = ordered[ordered.length - 1].source_type;
