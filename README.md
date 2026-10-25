@@ -1,7 +1,7 @@
 # Diffusion-Model-DTMs
 
-This repo also hosts a human-subjects evaluation study for the DTM
-diffusion model's four checkpoints — see [`study/`](study/README.md)
+This repo hosts a verisimilitude study for Stable Diffusion Model LoRAs 
+trained on inpainting retention basins in Digital Terrain Models
 for the study itself (a static site + Supabase backend, published via
-GitHub Pages) and [`supabase/`](supabase/schema.sql) for its schema and
-Edge Functions.
+GitHub Pages) see [`study/`](study/README.md)  and see [`supabase/`](supabase/schema.sql) 
+for its schema and Edge Functions.
