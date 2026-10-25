@@ -1,6 +1,16 @@
 // Experimental design constants. Changing these changes the study itself —
 // bump EXPERIMENT_VERSION whenever you touch this file, so old and new
 // participants' rows are distinguishable in the exported data.
+//
+// EXPERIMENT_VERSION is also the "which image set is live" switch. This ONE
+// constant decides:
+//   1. which images start-session draws from (images.experiment_version
+//      must equal it -- see sequence.ts),
+//   2. which round the admin page / CSV exports show by default,
+//   3. the experiment_version stamped onto every NEW participant + response.
+// "v1" = the original image set. To switch the study to the new image set
+// (source-images/v2/...), change this to "v2" and redeploy the Edge
+// Functions. Old data is never touched; it simply stays tagged "v1".
 export const EXPERIMENT_VERSION = "v1";
 
 // 'real', or the name of whatever AI source folder is active (e.g.

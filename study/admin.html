@@ -36,6 +36,8 @@ table{width:100%;border-collapse:collapse;background:var(--surface-2);border:1px
 th,td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--line)}
 th{font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted)}
 .actions{display:flex;gap:10px;margin-top:.6em}
+.round{display:flex;align-items:center;gap:10px;margin:.4em 0 0;color:var(--text-secondary);font-size:.9rem}
+.round select{width:auto;margin:0;padding:.45em .7em}
 </style></head><body>
 
 <div id="gate" class="gate">
@@ -49,6 +51,12 @@ th{font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;color:var(--te
 
 <div class="wrap" id="app" hidden>
   <h1>Study admin</h1>
+
+  <!-- Which image set (round) every number, table and export below refers
+       to. Filled from the server (admin-data) after sign-in. -->
+  <label class="round">Image set / round:
+    <select id="versionSelect"></select>
+  </label>
 
   <h2>Participants</h2>
   <div class="tiles" id="participantTiles"></div>
@@ -158,8 +166,24 @@ function tile(container, value, label) {
   container.appendChild(el);
 }
 
+// The round currently shown. null = let the server pick its default (the
+// live round, EXPERIMENT_VERSION in config.ts). Otherwise "v1", "v2", ...
+// or "all" (every round combined). Sent with every stats + export request.
+let currentVersion = null;
+
 async function loadStats() {
-  const data = await (await callFunction("admin-data")).json();
+  const data = await (await callFunction("admin-data", { experiment_version: currentVersion })).json();
+
+  // Fill the round dropdown once, from the list the server returns.
+  const sel = document.getElementById("versionSelect");
+  if (!sel.options.length) {
+    for (const v of data.versions) {
+      sel.add(new Option(v === data.current_version ? `${v} (current)` : v, v));
+    }
+    sel.add(new Option("All rounds", "all"));
+  }
+  sel.value = data.selected_version;
+  currentVersion = data.selected_version;
 
   const pTiles = document.getElementById("participantTiles");
   pTiles.innerHTML = "";
@@ -237,16 +261,25 @@ function renderParticipantKpis(rows) {
   }
 }
 
-async function downloadCsv(type, filename) {
-  const res = await callFunction("admin-export", { type });
+// Exports the round currently selected in the dropdown; the round is part
+// of the filename (e.g. raw_responses_v2.csv) so files from different
+// rounds can't be mixed up.
+async function downloadCsv(type, baseName) {
+  const res = await callFunction("admin-export", { type, experiment_version: currentVersion });
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
-  a.href = url; a.download = filename;
+  a.href = url; a.download = `${baseName}_${currentVersion || "all"}.csv`;
   document.body.appendChild(a); a.click(); a.remove();
   URL.revokeObjectURL(url);
 }
-document.getElementById("exportRaw").addEventListener("click", () => downloadCsv("raw", "raw_responses.csv"));
-document.getElementById("exportSummary").addEventListener("click", () => downloadCsv("summary", "participant_summary.csv"));
+document.getElementById("exportRaw").addEventListener("click", () => downloadCsv("raw", "raw_responses"));
+document.getElementById("exportSummary").addEventListener("click", () => downloadCsv("summary", "participant_summary"));
+
+// Switching the dropdown reloads every number and table for that round.
+document.getElementById("versionSelect").addEventListener("change", (e) => {
+  currentVersion = e.target.value;
+  loadStats().catch((err) => alert(err.message));
+});
 </script>
 </body></html>

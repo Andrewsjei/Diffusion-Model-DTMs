@@ -1,0 +1,10 @@
+{
+  "lora_name": "SDM3.5Synth/checkpoint-5000_lora.safetensors",
+  "output_directory": "/home/aibrahim/Documents/Evaluation/generated/sd35/loras/SDM3.5Synth/checkpoint-5000_lora",
+  "model_family": "sd35",
+  "use_lora": true,
+  "images_requested": 200,
+  "images_processed": 200,
+  "images_failed": 0,
+  "failures": []
+}

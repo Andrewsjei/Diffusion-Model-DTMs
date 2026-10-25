@@ -1,5 +1,6 @@
 import { corsHeaders, preflight, json } from "../_shared/cors.ts";
 import { serviceClient, requireAdmin, fetchAllRows } from "../_shared/db.ts";
+import { EXPERIMENT_VERSION } from "../_shared/config.ts";
 
 function csvEscape(v: unknown): string {
   const s = v === null || v === undefined ? "" : String(v);
@@ -40,12 +41,22 @@ Deno.serve(async (req) => {
   if (!userId) return json({ error: "Unauthorized" }, 401);
 
   let type = "raw";
+  // Which round (image set) to export: a specific one like "v2", "all" for
+  // every round, or nothing/null for the currently live round
+  // (EXPERIMENT_VERSION in config.ts). Same rule as admin-data.
+  let version: string | null = EXPERIMENT_VERSION;
   try {
     const body = await req.json();
     if (body?.type === "summary") type = "summary";
+    if (body?.experiment_version === "all") {
+      version = null; // null = no filter = every round
+    } else if (typeof body?.experiment_version === "string" && body.experiment_version) {
+      version = body.experiment_version;
+    }
   } catch {
-    // no body → default to raw
+    // no body → default to raw, current round
   }
+  const versionLabel = version ?? "all"; // used in the download filename
 
   const db = serviceClient();
 
@@ -55,16 +66,15 @@ Deno.serve(async (req) => {
   // ordering across the walk.
   let responses: ResponseRow[];
   try {
-    responses = await fetchAllRows<ResponseRow>((from, to) =>
-      db
+    responses = await fetchAllRows<ResponseRow>((from, to) => {
+      let q = db
         .from("latest_responses")
         .select(
           "participant_id, trial_number, page, image_id, image_source, response, response_time_ms, submitted_at, trial_sequence_id, experiment_version",
-        )
-        .order("participant_id")
-        .order("trial_number")
-        .range(from, to)
-    );
+        );
+      if (version) q = q.eq("experiment_version", version); // only the selected round
+      return q.order("participant_id").order("trial_number").range(from, to);
+    });
   } catch (e) {
     return json({ error: (e as Error).message }, 500);
   }
@@ -78,7 +88,7 @@ Deno.serve(async (req) => {
       r.participant_id, r.trial_number, r.page, r.image_id, r.image_source,
       r.response, r.response_time_ms, r.submitted_at, r.trial_sequence_id, r.experiment_version,
     ]);
-    return csvResponse(toCsv([header, ...rows]), "raw_responses.csv");
+    return csvResponse(toCsv([header, ...rows]), `raw_responses_${versionLabel}.csv`);
   }
 
   // Participant-level summary. No PII to withhold — participant_id is
@@ -88,9 +98,11 @@ Deno.serve(async (req) => {
   // would just be something to disagree with later.
   let participants: { participant_id: string; created_at: string; completed_at: string | null }[];
   try {
-    participants = await fetchAllRows((from, to) =>
-      db.from("participants").select("participant_id, created_at, completed_at").range(from, to)
-    );
+    participants = await fetchAllRows((from, to) => {
+      let q = db.from("participants").select("participant_id, created_at, completed_at");
+      if (version) q = q.eq("experiment_version", version); // only the selected round
+      return q.order("participant_id").range(from, to);
+    });
   } catch (e) {
     return json({ error: (e as Error).message }, 500);
   }
@@ -143,5 +155,5 @@ Deno.serve(async (req) => {
     ];
   });
 
-  return csvResponse(toCsv([header, ...rows]), "participant_summary.csv");
+  return csvResponse(toCsv([header, ...rows]), `participant_summary_${versionLabel}.csv`);
 });

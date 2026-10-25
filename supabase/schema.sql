@@ -21,8 +21,15 @@ create table if not exists images (
   storage_path text not null,               -- e.g. images/pool/ab12cd34ef.jpg — relative to study/, served by GitHub Pages
   active       boolean not null default true,
   times_shown  integer not null default 0,  -- incremented by start-session; keeps exposure roughly even across participants
+  -- Which round (image set) this image belongs to: 'v1' = original set,
+  -- 'v2' = images from study/source-images/v2/..., and so on. start-session
+  -- only draws images whose experiment_version equals EXPERIMENT_VERSION in
+  -- supabase/functions/_shared/config.ts. Matches participants/responses.
+  experiment_version text not null default 'v1',
   created_at   timestamptz not null default now()
 );
+create index if not exists images_version_idx
+  on images (experiment_version, source_type, active);
 
 create table if not exists participants (
   participant_id    text primary key,        -- e.g. P-7F3A92

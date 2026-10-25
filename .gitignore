@@ -10,3 +10,9 @@ __pycache__/
 .supabase/
 supabase/.temp/
 .claude/
+
+# Raw source images of new rounds stay on your machine only. sync_images.py
+# reads them locally and commits just the hashed copies in study/images/pool/.
+# Otherwise the labelled folder + file names (real/ vs checkpointN/) are
+# published on GitHub and on the Pages site, which defeats the blinding.
+study/source-images/v*/

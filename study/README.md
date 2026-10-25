@@ -135,6 +135,61 @@ The two intro-page examples are separate: replace
 openly labeled and are never part of the 48 trials, so they don't go
 through the pipeline above.
 
+## Running a new round with different images
+
+A **round** is one complete image set with its own participants and its
+own results. The original images are round `v1`; a new set is `v2`, then
+`v3`, and so on. Rounds never mix: participants only ever see images of
+the live round, and the admin page / CSV exports show one round at a time
+(a dropdown at the top of `admin.html`). Nothing from an earlier round is
+deleted or changed.
+
+How it hangs together:
+
+- Every row in `images`, `participants` and `responses` carries an
+  `experiment_version` (`v1`, `v2`, ...).
+- `EXPERIMENT_VERSION` in `supabase/functions/_shared/config.ts` is the
+  single switch for the live round. `start-session` draws only images
+  whose `experiment_version` equals it; new participants and their
+  responses are stamped with it; the admin page opens on it.
+- Folder layout: `study/source-images/v2/<pool>/` is round `v2`
+  (any pool names; the real images go in the pool named exactly `real`).
+  The old top-level folders (`real/`, `checkpoint1/`, ...) are round `v1`.
+
+### One-time migration (existing project, only once)
+
+1. Supabase -> SQL Editor -> run `supabase/migration_add_image_versions.sql`
+   (tags all current images `v1`; check the two result tables it prints).
+2. Redeploy the Edge Functions (`supabase functions deploy`).
+
+### Starting a new round (e.g. v2)
+
+1. Download the old round's CSVs from `admin.html` as a backup.
+2. Create `study/source-images/v2/real/` plus one folder per new AI model
+   / checkpoint and put the images in. Needed: at least 24 real images and
+   at least 24 / (number of AI folders) per AI folder -- far more is
+   better. The number of AI folders must be **1, 2, 4 or 8**. Use *new*
+   names for the AI folders if they are different models (the "All
+   rounds" view merges results by name).
+3. `python3 scripts/sync_images.py v2 --dry-run` -- reports what it would
+   do and whether the round is ready. Then run it without `--dry-run`.
+4. Commit and push the new files in `study/images/pool/`, and wait for the
+   GitHub Pages workflow to finish (the images must be online first).
+   Participants are still on `v1` at this point.
+5. Switch: set `EXPERIMENT_VERSION = "v2"` in `config.ts`, then
+   `supabase functions deploy`. From now on new participants get only the
+   `v2` images.
+6. Do one test session and check `admin.html` (round `v2`).
+
+Participants who are half-way through the old round keep their stored
+sequence and finish on the old images (their answers stay `v1`) -- so
+never delete files from `study/images/pool/`. To go back to an earlier
+round, set `EXPERIMENT_VERSION` back and redeploy.
+
+`scripts/set_active_pools.py` is not needed for switching rounds. It
+matches by folder name across *all* rounds, so only use it if you
+understand that.
+
 ## Threat model
 
 - **Participants**: anonymous, no accounts. `participant_id` +

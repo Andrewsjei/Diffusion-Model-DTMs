@@ -1,12 +1,13 @@
 import {
   AI_PER_BLOCK,
   BLOCKS,
+  EXPERIMENT_VERSION,
   IMAGES_PER_PAGE,
   REAL_PER_BLOCK,
   REAL_TOTAL,
   SourceType,
 } from "./config.ts";
-import { serviceClient } from "./db.ts";
+import { fetchAllRows, serviceClient } from "./db.ts";
 
 interface ImageRow {
   image_id: string;
@@ -34,6 +35,10 @@ async function pickImages(
     .select("image_id, source_type, storage_path, times_shown")
     .eq("source_type", sourceType)
     .eq("active", true)
+    // Only draw from the CURRENT image set (round). Images registered for
+    // other rounds are never mixed in, even if they share a source_type
+    // name such as "real".
+    .eq("experiment_version", EXPERIMENT_VERSION)
     .order("times_shown", { ascending: true })
     .limit(count * 4); // wider pool than needed so the random step below has room to work with
   if (error) throw new Error(`images query failed: ${error.message}`);
@@ -53,17 +58,30 @@ async function pickImages(
   return pool.slice(0, count);
 }
 
-// Which non-real pools participants currently see -- driven entirely by
-// images.active, which scripts/set_active_pools.py flips. Nothing here
-// hardcodes a list of checkpoint/model names.
+// Which non-real pools participants currently see -- driven by images.active
+// AND by the current round (images.experiment_version = EXPERIMENT_VERSION).
+// Nothing here hardcodes a list of checkpoint/model names.
+//
+// This reads one row per image, so it pages through the table with
+// fetchAllRows: PostgREST silently truncates a plain select at 1000 rows,
+// which could make a whole pool "disappear" if the round has many images.
 async function getActivePools(db: ReturnType<typeof serviceClient>): Promise<string[]> {
-  const { data, error } = await db
-    .from("images")
-    .select("source_type")
-    .eq("active", true)
-    .neq("source_type", "real");
-  if (error) throw new Error(`active pools query failed: ${error.message}`);
-  return [...new Set((data ?? []).map((r) => r.source_type as string))].sort();
+  let rows: { source_type: string }[];
+  try {
+    rows = await fetchAllRows<{ source_type: string }>((from, to) =>
+      db
+        .from("images")
+        .select("source_type")
+        .eq("active", true)
+        .eq("experiment_version", EXPERIMENT_VERSION)
+        .neq("source_type", "real")
+        .order("image_id") // stable order, so paging never skips/repeats rows
+        .range(from, to)
+    );
+  } catch (e) {
+    throw new Error(`active pools query failed: ${(e as Error).message}`);
+  }
+  return [...new Set(rows.map((r) => r.source_type))].sort();
 }
 
 function chunk<T>(arr: T[], size: number): T[][] {
@@ -146,7 +164,8 @@ export async function buildSequence(): Promise<Trial[]> {
   const pools = await getActivePools(db);
   if (pools.length === 0) {
     throw new Error(
-      "No active AI image pool. Run scripts/set_active_pools.py to activate at least one.",
+      `No active AI image pool for round "${EXPERIMENT_VERSION}". Register that round's images ` +
+      "with scripts/sync_images.py (see study/README.md, \"Running a new round\").",
     );
   }
   if (AI_PER_BLOCK % pools.length !== 0) {
