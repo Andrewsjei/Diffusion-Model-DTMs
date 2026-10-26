@@ -136,6 +136,11 @@ async function login() {
     document.getElementById("app").hidden = false;
     await loadStats();
   } catch (e) {
+    // Show the error where it can actually be read: if loading the stats
+    // failed after sign-in, bring the sign-in box back with the message
+    // instead of leaving an empty page.
+    document.getElementById("gate").hidden = false;
+    document.getElementById("app").hidden = true;
     errEl.textContent = e.message;
   }
 }
@@ -175,15 +180,25 @@ async function loadStats() {
   const data = await (await callFunction("admin-data", { experiment_version: currentVersion })).json();
 
   // Fill the round dropdown once, from the list the server returns.
+  // If the server is the OLD admin-data function (not redeployed), it sends
+  // no round list: hide the dropdown and show everything combined, which is
+  // exactly what the old function does anyway.
   const sel = document.getElementById("versionSelect");
-  if (!sel.options.length) {
-    for (const v of data.versions) {
-      sel.add(new Option(v === data.current_version ? `${v} (current)` : v, v));
+  const roundBox = sel.closest(".round");
+  if (Array.isArray(data.versions)) {
+    roundBox.hidden = false;
+    if (!sel.options.length) {
+      for (const v of data.versions) {
+        sel.add(new Option(v === data.current_version ? `${v} (current)` : v, v));
+      }
+      sel.add(new Option("All rounds", "all"));
     }
-    sel.add(new Option("All rounds", "all"));
+    sel.value = data.selected_version;
+    currentVersion = data.selected_version;
+  } else {
+    roundBox.hidden = true;
+    currentVersion = null;
   }
-  sel.value = data.selected_version;
-  currentVersion = data.selected_version;
 
   const pTiles = document.getElementById("participantTiles");
   pTiles.innerHTML = "";
